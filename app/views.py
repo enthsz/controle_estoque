@@ -72,28 +72,27 @@ def delete_product(request, product_name):
 def register_sale(request):
     data = request.data
     product_id = data['produto_id']
-    quantidade = data['quantidade']
+    sold = data['vendidos']
 
-    if 'produto_id' not in data or 'quantidade' not in data:
+    if 'produto_id' not in data or 'vendidos' not in data or 'lucro' not in data:
         return Response({'error': 'Dados faltando'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
         product = Product.objects.get(id=product_id)
 
-        if product.quantidade_em_estoque >= int(quantidade):
-            if int(quantidade) == 0:
-                return Response({'error': 'Nao pode fazer a venda, pois voce nao adicionou item nenhum'})
-            product.quantidade_em_estoque -= int(quantidade)
+        if product.quantidade_em_estoque >= int(sold):
+            if int(sold) == 0:
+                return Response({'error': 'Nao pode fazer a venda, pois voce nao adicionou nenhum item no estoque'})
+            product.quantidade_em_estoque -= int(sold)
             product.save()
 
             existing_sale = Sale.objects.filter(produto_id=product_id).first()
             if existing_sale:
-                existing_sale.quantidade += int(quantidade)
+                existing_sale.vendidos += int(sold)
                 existing_sale.save()
-                sale_serializer = SaleSerializer(existing_sale)
-                return Response(sale_serializer.data,status=status.HTTP_200_OK)
+                return Response({'success': 'Compra Efetuada'})
             else:
-                sale = Sale.objects.create(produto_id=product_id, quantidade=quantidade)
+                sale = Sale.objects.create(produto_id=product_id, vendidos=sold)
                 sale.save()
                 sale_serializer = SaleSerializer(sale)
                 return Response(sale_serializer.data, status=status.HTTP_201_CREATED)

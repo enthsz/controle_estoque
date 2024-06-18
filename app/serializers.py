@@ -19,8 +19,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
+    produto_id = serializers.CharField()
     data_venda = CustomDateTimeField(required=False, allow_null=True)
-
+    
     class Meta:
         model = Sale
-        fields = ['produto_id','quantidade', 'data_venda']
+        fields = ['produto_id','vendidos','lucro','data_venda']
