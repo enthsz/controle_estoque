@@ -4,8 +4,9 @@ from . serializers import ProductSerializer, SaleSerializer
 from . models import Product, Sale
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.decorators import permission_classes
+import decimal
 
 
 @api_view(['GET'])
@@ -20,7 +21,13 @@ def list_product(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_product(request):
+    data = request.data
+    name = data.get('nome')
     serializer = ProductSerializer(data=request.data)
+
+    if Product.objects.filter(nome=name).exists():
+        return Response({'error': 'Produto ja existente no estoque'}, status=status.HTTP_400_BAD_REQUEST)
+
     if serializer.is_valid():
         serializer.save()  
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -60,21 +67,21 @@ def delete_product(request, product_name):
         product.delete()
         return Response({'detail': 'Produto excluido'}, status=status.HTTP_204_NO_CONTENT)
     except Product.DoesNotExist:
-        return Response({'error': 'Produto nao existente'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Esse produto nao existe'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 
-#############
-
+# Registrar venda e historico de venda
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def register_sale(request):
     data = request.data
-    product_id = data['produto_id']
-    sold = data['vendidos']
+    product_id = data.get('produto_id')
+    sold = data.get('vendidos')
+    profit = data.get('lucro')
 
-    if 'produto_id' not in data or 'vendidos' not in data or 'lucro' not in data:
+    if not product_id or not sold or not profit:
         return Response({'error': 'Dados faltando'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
@@ -82,20 +89,28 @@ def register_sale(request):
 
         if product.quantidade_em_estoque >= int(sold):
             if int(sold) == 0:
-                return Response({'error': 'Nao pode fazer a venda, pois voce nao adicionou nenhum item no estoque'})
+                return Response({'error': 'Nao pode fazer a venda, pois voce nao adicionou nenhum item em quantidade'})
+            
             product.quantidade_em_estoque -= int(sold)
             product.save()
 
-            existing_sale = Sale.objects.filter(produto_id=product_id).first()
+            
+            existing_sale = Sale.objects.filter(produto_id=product).first()
             if existing_sale:
                 existing_sale.vendidos += int(sold)
+                profit = decimal.Decimal(profit)
+                existing_sale.lucro += profit
                 existing_sale.save()
-                return Response({'success': 'Compra Efetuada'})
+                sale_serializer = SaleSerializer(existing_sale)
+                return Response(sale_serializer.data,status=status.HTTP_200_OK)
             else:
-                sale = Sale.objects.create(produto_id=product_id, vendidos=sold)
+                sale = Sale.objects.create(produto_id=product, vendidos=sold, lucro=profit)
                 sale.save()
                 sale_serializer = SaleSerializer(sale)
                 return Response(sale_serializer.data, status=status.HTTP_201_CREATED)
+                
+            
+
         else:
             return Response({'error': 'Quantidade em estoque insuficiente'}, status=status.HTTP_400_BAD_REQUEST)
     except Product.DoesNotExist:
@@ -103,7 +118,7 @@ def register_sale(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAdminUser])
 def sales_history(request):
     try:
         sale = Sale.objects.all()
